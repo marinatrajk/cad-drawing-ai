@@ -21,7 +21,7 @@ from .dxf_writer import write_dxf
 @click.argument("step_file", type=click.Path(exists=True))
 @click.option("--output", "-o", default=None, help="Output DXF path (default: same name as input)")
 @click.option("--no-ai", is_flag=True, help="Skip LLM dimensioning, use fallback bounding-box dims")
-@click.option("--model", default="claude-opus-4-20250514", help="Anthropic model to use")
+@click.option("--model", default="claude-opus-4-8", help="Anthropic model to use")
 @click.option("--verbose", "-v", is_flag=True, help="Print detailed progress")
 def main(step_file, output, no_ai, model, verbose):
     """Convert a 3D STEP file to a 2D manufacturing DXF drawing."""
