@@ -66,6 +66,30 @@ The JSON schema:
 }
 
 Remember: ONLY JSON. No thinking. No explanation. Start with { and end with }.
+
+EXAMPLE INPUT:
+Part: plate.step
+Bounding box: 50.0 x 30.0 x 10.0 mm
+- Front view: 50.0 (width) x 10.0 (height)
+- Top view: 50.0 (width) x 30.0 (depth)
+- Right view: 30.0 (depth) x 10.0 (height)
+
+Holes (positions pre-mapped to each view):
+  Hole 1: Ø4.0mm, through
+    Front view position: [10.0, 5.0]
+    Top view position: [10.0, 10.0]
+    Right view position: [10.0, 5.0]
+  Hole 2: Ø4.0mm, through
+    Front view position: [40.0, 5.0]
+    Top view position: [40.0, 10.0]
+    Right view position: [10.0, 5.0]
+
+For each view, (0,0) is the bottom-left corner. Coordinates are in mm.
+Dimension the overall sizes, hole positions, and hole diameters.
+Return ONLY the JSON object now.
+
+EXAMPLE OUTPUT (this is what you must return, nothing else):
+{"dimensions":[{"view":"front","type":"linear","from":[0,0],"to":[50,0],"offset":15,"label":"50"},{"view":"front","type":"linear","from":[0,0],"to":[0,10],"offset":15,"label":"10"},{"view":"front","type":"linear","from":[0,0],"to":[10,0],"offset":30,"label":"10"},{"view":"front","type":"diameter","center":[10,5],"radius":2.0,"label":"Ø4 THRU"},{"view":"front","type":"diameter","center":[40,5],"radius":2.0,"label":"Ø4 THRU"},{"view":"top","type":"linear","from":[0,0],"to":[0,30],"offset":15,"label":"30"},{"view":"top","type":"linear","from":[0,0],"to":[0,10],"offset":30,"label":"10"}],"annotations":[],"notes":["All dimensions in mm","Remove all sharp edges"]}
 """
 
 
