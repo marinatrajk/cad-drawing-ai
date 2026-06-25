@@ -10,7 +10,7 @@ Uses ezdxf to create a DXF file with:
 
 import ezdxf
 from ezdxf.enums import TextEntityAlignment
-from typing import List, dict
+from typing import List, Dict, Any
 import os
 
 
@@ -133,7 +133,7 @@ def _add_dimension(msp, dim, offset_x, offset_y):
 
 
 def write_dxf(
-    views: dict,
+    views: Dict[str, Any],
     metadata,
     dimensions: list,
     output_path: str,
