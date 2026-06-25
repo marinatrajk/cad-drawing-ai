@@ -107,7 +107,7 @@ def extract_metadata(filepath: str, shape: Optional[cq.Workplane] = None) -> Par
     holes_list = []
 
     try:
-        for face in shape.faces("%").vals():
+        for face in shape.faces().vals():
             face_type = "other"
             radius = None
             normal = None
@@ -196,14 +196,24 @@ def extract_metadata(filepath: str, shape: Optional[cq.Workplane] = None) -> Par
     is_sym_y = abs(bb.ylen - 2 * (bb.center.y - bb.ymin)) < 0.01
     is_sym_z = abs(bb.zlen - 2 * (bb.center.z - bb.zmin)) < 0.01
 
+    # Safe edge/vertex counts (avoid selector syntax issues across CadQuery versions)
+    try:
+        edge_count = len(shape.edges().vals())
+    except Exception:
+        edge_count = 0
+    try:
+        vertex_count = len(shape.vertices().vals())
+    except Exception:
+        vertex_count = 0
+
     return PartMetadata(
         filename=filename,
         bounding_box=bounding_box,
         volume=round(volume, 3),
         surface_area=round(surface_area, 3),
         face_count=len(faces_list),
-        edge_count=len(shape.edges("%").vals()) if shape else 0,
-        vertex_count=len(shape.vertices("%").vals()) if shape else 0,
+        edge_count=edge_count,
+        vertex_count=vertex_count,
         faces=faces_list[:50],  # cap for prompt size
         holes=unique_holes[:20],
         is_symmetric_x=is_sym_x,
