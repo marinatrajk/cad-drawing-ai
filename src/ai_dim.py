@@ -66,7 +66,7 @@ You MUST respond with valid JSON only, no markdown, no explanation. The JSON sch
 def generate_dimensions(
     metadata,
     api_key: Optional[str] = None,
-    model: str = "claude-opus-4-20250514",
+    model: str = "claude-opus-4-8",
 ) -> dict:
     """
     Call the LLM with part metadata and get back dimensioning decisions.
