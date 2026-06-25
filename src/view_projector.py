@@ -52,17 +52,15 @@ def export_view_svg(shape: cq.Workplane, view_name: str, output_path: str) -> di
     with open(output_path, "r") as f:
         content = f.read()
 
-    # Parse width/height from SVG
+    # Parse width/height from SVG (may be on separate lines)
+    import re
     width, height = 0, 0
-    for line in content.split("\n"):
-        if "width" in line and "height" in line:
-            import re
-            w_match = re.search(r'width="([\d.]+)', line)
-            h_match = re.search(r'height="([\d.]+)', line)
-            if w_match:
-                width = float(w_match.group(1))
-            if h_match:
-                height = float(h_match.group(1))
+    w_match = re.search(r'width="([\d.]+)', content)
+    h_match = re.search(r'height="([\d.]+)', content)
+    if w_match:
+        width = float(w_match.group(1))
+    if h_match:
+        height = float(h_match.group(1))
 
     return {"view": view_name, "width": width, "height": height, "path": output_path}
 
