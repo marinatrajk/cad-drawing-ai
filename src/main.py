@@ -21,9 +21,10 @@ from .dxf_writer import write_dxf
 @click.argument("step_file", type=click.Path(exists=True))
 @click.option("--output", "-o", default=None, help="Output DXF path (default: same name as input)")
 @click.option("--no-ai", is_flag=True, help="Skip LLM dimensioning, use fallback bounding-box dims")
-@click.option("--model", default="claude-opus-4-8", help="Anthropic model to use")
+@click.option("--model", default="accounts/fireworks/models/glm-5p2", help="LLM model ID")
+@click.option("--provider", default="fireworks", help="LLM provider: fireworks or anthropic")
 @click.option("--verbose", "-v", is_flag=True, help="Print detailed progress")
-def main(step_file, output, no_ai, model, verbose):
+def main(step_file, output, no_ai, model, provider, verbose):
     """Convert a 3D STEP file to a 2D manufacturing DXF drawing."""
     start = time.time()
 
@@ -40,7 +41,7 @@ def main(step_file, output, no_ai, model, verbose):
     print(f"  CAD Drawing AI")
     print(f"  Input:  {step_file}")
     print(f"  Output: {output}")
-    print(f"  AI:     {'off' if no_ai else 'on (' + model + ')'}")
+    print(f"  AI:     {'off' if no_ai else 'on (' + provider + ': ' + model + ')'}")
     print(f"{'='*60}\n")
 
     # Step 1: Load and parse
@@ -67,7 +68,7 @@ def main(step_file, output, no_ai, model, verbose):
         dim_result = _fallback_dimensions(metadata)
         print(f"  Fallback: {len(dim_result['dimensions'])} dimensions")
     else:
-        dim_result = generate_dimensions(metadata, model=model)
+        dim_result = generate_dimensions(metadata, model=model, provider=provider)
 
     # Step 4: Write DXF
     print("\n[4/4] Writing DXF drawing...")
