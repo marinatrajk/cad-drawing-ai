@@ -1,0 +1,9 @@
+cadquery>=2.4
+ezdxf>=1.1.0
+anthropic>=0.40.0
+click>=8.1.0
+svgpathtools>=1.6.0
+numpy>=1.24.0
+fastapi>=0.110.0
+uvicorn>=0.29.0
+python-multipart>=0.0.9
