@@ -114,18 +114,38 @@ def _call_fireworks(metadata, api_key, model) -> dict:
     user_msg = _build_user_message(metadata)
 
     print(f"  Sending geometry to Fireworks ({model})...")
-    response = client.chat.completions.create(
-        model=model,
-        max_tokens=8000,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_msg},
-        ],
-        response_format={"type": "json_object"},
-    )
-
-    text = response.choices[0].message.content.strip()
-    return _parse_llm_response(text, metadata)
+    
+    # Try up to 3 times — GLM can be non-deterministic about JSON output
+    for attempt in range(3):
+        if attempt > 0:
+            print(f"  Retry {attempt}/2 (previous attempt returned non-JSON)...")
+        
+        response = client.chat.completions.create(
+            model=model,
+            max_tokens=8000,
+            temperature=0,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_msg},
+            ],
+            response_format={"type": "json_object"},
+        )
+        
+        text = response.choices[0].message.content.strip()
+        
+        # Check if response looks like JSON (starts with { after stripping)
+        if text.startswith("{"):
+            return _parse_llm_response(text, metadata)
+        
+        # If not JSON, try parsing anyway (parser will extract embedded JSON)
+        result = _parse_llm_response(text, metadata)
+        if result.get("dimensions"):
+            return result
+        
+        print(f"  [warn] Attempt {attempt+1}: GLM returned reasoning text, not JSON")
+    
+    print("  [warn] All attempts failed, using fallback dimensions")
+    return _fallback_dimensions(metadata)
 
 
 def _call_anthropic(metadata, api_key, model) -> dict:
