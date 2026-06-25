@@ -20,6 +20,8 @@ from typing import Optional
 
 SYSTEM_PROMPT = """You are a mechanical engineering drafting expert. You receive structured geometry data extracted from a 3D STEP file and must decide how to dimension the 2D manufacturing drawing.
 
+CRITICAL: Output ONLY the JSON object. Do NOT include reasoning, explanation, thinking, or any other text. The response must start with { and end with }.
+
 Your job:
 1. Decide which dimensions to place on which views
 2. Specify dimension types (linear, diameter, radius)
@@ -34,20 +36,20 @@ Rules:
 - Provide coordinates relative to the view's local origin (0,0 = bottom-left of that view)
 - Coordinates are in mm
 
-You MUST respond with valid JSON only, no markdown, no explanation. The JSON schema:
+The JSON schema:
 
 {
   "dimensions": [
     {
       "view": "front" | "top" | "right",
       "type": "linear" | "diameter" | "radius",
-      "from": [x, y],      // for linear: start point
-      "to": [x, y],        // for linear: end point
-      "offset": 15,         // dimension line offset from part edge (mm)
-      "center": [x, y],    // for diameter/radius: center point
-      "radius": 5.0,        // for diameter/radius: radius value
-      "label": "Ø10",       // display label
-      "tolerance": "+/-0.1" // optional
+      "from": [x, y],
+      "to": [x, y],
+      "offset": 15,
+      "center": [x, y],
+      "radius": 5.0,
+      "label": "Ø10",
+      "tolerance": "+/-0.1"
     }
   ],
   "annotations": [
@@ -62,6 +64,8 @@ You MUST respond with valid JSON only, no markdown, no explanation. The JSON sch
     "Remove all sharp edges"
   ]
 }
+
+Remember: ONLY JSON. No thinking. No explanation. Start with { and end with }.
 """
 
 
@@ -112,7 +116,7 @@ def _call_fireworks(metadata, api_key, model) -> dict:
     print(f"  Sending geometry to Fireworks ({model})...")
     response = client.chat.completions.create(
         model=model,
-        max_tokens=2000,
+        max_tokens=8000,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_msg},
@@ -154,24 +158,46 @@ def _call_anthropic(metadata, api_key, model) -> dict:
 
 
 def _build_user_message(metadata) -> str:
-    """Build the user prompt from part metadata."""
-    part_summary = metadata.to_summary()
+    """Build the user prompt from part metadata, pre-computing hole positions per view."""
     bb = metadata.bounding_box
     size = bb["size"]
+    w, d, h = size
 
-    return f"""Here is the geometry data for a 3D part that needs a 2D manufacturing drawing:
+    # Pre-compute hole positions for each view so the LLM doesn't have to
+    hole_lines = []
+    for i, hole in enumerate(metadata.holes):
+        pos = hole["position"]
+        px, py, pz = pos
+        r = hole["radius"]
+        dia = r * 2
+        depth = "through" if hole["is_through"] else f"{hole['depth']:.1f}mm deep"
 
-{part_summary}
+        # Map 3D position to 2D view coordinates
+        front_pos = f"[{px:.1f}, {pz:.1f}]"  # X, Z
+        top_pos = f"[{px:.1f}, {py:.1f}]"     # X, Y
+        right_pos = f"[{py:.1f}, {pz:.1f}]"   # Y, Z
 
-The bounding box size is {size[0]:.1f} x {size[1]:.1f} x {size[2]:.1f} mm.
-- Front view shows X (width) x Z (height)
-- Top view shows X (width) x Y (depth)
-- Right view shows Y (depth) x Z (height)
+        hole_lines.append(
+            f"  Hole {i+1}: Ø{dia:.1f}mm, {depth}\n"
+            f"    Front view position: {front_pos}\n"
+            f"    Top view position: {top_pos}\n"
+            f"    Right view position: {right_pos}"
+        )
 
-For each view, the local coordinate origin (0,0) is at the bottom-left corner.
-The part fills the view, so use the bounding box dimensions to estimate positions.
+    holes_section = "\n".join(hole_lines) if hole_lines else "  None"
 
-Provide the dimensioning JSON now."""
+    return f"""Part: {metadata.filename}
+Bounding box: {w:.1f} x {d:.1f} x {h:.1f} mm
+- Front view: {w:.1f} (width) x {h:.1f} (height)
+- Top view: {w:.1f} (width) x {d:.1f} (depth)
+- Right view: {d:.1f} (depth) x {h:.1f} (height)
+
+Holes (positions pre-mapped to each view):
+{holes_section}
+
+For each view, (0,0) is the bottom-left corner. Coordinates are in mm.
+Dimension the overall sizes, hole positions, and hole diameters.
+Return ONLY the JSON object now."""
 
 
 def _parse_llm_response(text: str, metadata) -> dict:
