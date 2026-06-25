@@ -72,7 +72,13 @@ def main(step_file, output, no_ai, model, provider, verbose):
 
     # Step 4: Write DXF
     print("\n[4/4] Writing DXF drawing...")
-    write_dxf(views, metadata, dim_result["dimensions"], output)
+    dims = dim_result.get("dimensions", [])
+    if not dims:
+        print("  [warn] No dimensions returned, adding fallback")
+        from .ai_dim import _fallback_dimensions
+        dim_result = _fallback_dimensions(metadata)
+        dims = dim_result["dimensions"]
+    write_dxf(views, metadata, dims, output)
 
     elapsed = time.time() - start
     print(f"\n{'='*60}")
