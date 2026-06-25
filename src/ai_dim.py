@@ -117,6 +117,7 @@ def _call_fireworks(metadata, api_key, model) -> dict:
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_msg},
         ],
+        response_format={"type": "json_object"},
     )
 
     text = response.choices[0].message.content.strip()
@@ -174,22 +175,50 @@ Provide the dimensioning JSON now."""
 
 
 def _parse_llm_response(text: str, metadata) -> dict:
-    """Parse JSON from LLM response, handling markdown fences."""
-    # Strip any markdown code fences if present
-    if text.startswith("```"):
-        text = text.split("\n", 1)[1] if "\n" in text else text
-        if text.endswith("```"):
-            text = text.rsplit("```", 1)[0]
-        text = text.strip()
+    """Parse JSON from LLM response, handling markdown fences and extra text."""
+    # Strategy 1: Strip markdown code fences if present
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        # Remove opening fence (```json or ```)
+        cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned
+        if cleaned.endswith("```"):
+            cleaned = cleaned.rsplit("```", 1)[0]
+        cleaned = cleaned.strip()
 
+    # Try direct parse first
     try:
-        result = json.loads(text)
+        result = json.loads(cleaned)
         print(f"  AI returned {len(result.get('dimensions', []))} dimensions")
         return result
-    except json.JSONDecodeError as e:
-        print(f"  [warn] LLM returned invalid JSON: {e}")
-        print(f"  Raw response: {text[:200]}...")
-        return _fallback_dimensions(metadata)
+    except json.JSONDecodeError:
+        pass
+
+    # Strategy 2: Find JSON object in the response (model may have added text)
+    # Look for the first { and last } and try to parse that substring
+    first_brace = text.find("{")
+    last_brace = text.rfind("}")
+    if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+        json_substr = text[first_brace:last_brace + 1]
+        try:
+            result = json.loads(json_substr)
+            print(f"  AI returned {len(result.get('dimensions', []))} dimensions")
+            return result
+        except json.JSONDecodeError:
+            pass
+
+        # Strategy 3: Try fixing common issues (trailing commas, etc.)
+        try:
+            # Remove trailing commas before } or ]
+            fixed = json_substr.replace(",}", "}").replace(",]", "]")
+            result = json.loads(fixed)
+            print(f"  AI returned {len(result.get('dimensions', []))} dimensions")
+            return result
+        except json.JSONDecodeError:
+            pass
+
+    print(f"  [warn] LLM returned invalid JSON after all parse attempts")
+    print(f"  Raw response (first 300 chars): {text[:300]}...")
+    return _fallback_dimensions(metadata)
 
 
 def _fallback_dimensions(metadata) -> dict:
