@@ -9,6 +9,8 @@ The LLM does NOT do geometry math. It makes engineering decisions:
 - What annotations to add (surface finish, thread specs, etc.)
 
 The CAD library executes the actual dimension placement.
+
+Supports Fireworks AI (OpenAI-compatible API) and Anthropic as fallback.
 """
 
 import json
@@ -66,22 +68,67 @@ You MUST respond with valid JSON only, no markdown, no explanation. The JSON sch
 def generate_dimensions(
     metadata,
     api_key: Optional[str] = None,
-    model: str = "claude-opus-4-8",
+    model: str = "accounts/fireworks/models/glm-5p2",
+    provider: str = "fireworks",
 ) -> dict:
     """
     Call the LLM with part metadata and get back dimensioning decisions.
 
     Args:
         metadata: PartMetadata object from step_parser
-        api_key: Anthropic API key (defaults to ANTHROPIC_API_KEY env var)
+        api_key: API key (defaults to FIREWORKS_API_KEY or ANTHROPIC_API_KEY env var)
         model: LLM model to use
+        provider: "fireworks" (OpenAI-compatible) or "anthropic"
 
     Returns: dict with "dimensions", "annotations", "notes"
     """
+    if provider == "fireworks":
+        return _call_fireworks(metadata, api_key, model)
+    else:
+        return _call_anthropic(metadata, api_key, model)
+
+
+def _call_fireworks(metadata, api_key, model) -> dict:
+    """Call Fireworks AI (OpenAI-compatible API)."""
+    try:
+        from openai import OpenAI
+    except ImportError:
+        print("  [error] openai package not installed. Run: pip install openai")
+        print("  Falling back to basic dimensions.")
+        return _fallback_dimensions(metadata)
+
+    key = api_key or os.environ.get("FIREWORKS_API_KEY")
+    if not key:
+        print("  [warn] No FIREWORKS_API_KEY set. Using fallback dimensions.")
+        return _fallback_dimensions(metadata)
+
+    client = OpenAI(
+        api_key=key,
+        base_url="https://api.fireworks.ai/inference/v1",
+    )
+
+    user_msg = _build_user_message(metadata)
+
+    print(f"  Sending geometry to Fireworks ({model})...")
+    response = client.chat.completions.create(
+        model=model,
+        max_tokens=2000,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_msg},
+        ],
+    )
+
+    text = response.choices[0].message.content.strip()
+    return _parse_llm_response(text, metadata)
+
+
+def _call_anthropic(metadata, api_key, model) -> dict:
+    """Call Anthropic Claude API (legacy support)."""
     try:
         import anthropic
     except ImportError:
-        print("  [error] anthropic package not installed. Skipping AI dimensioning.")
+        print("  [error] anthropic package not installed. Using fallback dimensions.")
         return _fallback_dimensions(metadata)
 
     key = api_key or os.environ.get("ANTHROPIC_API_KEY")
@@ -91,12 +138,27 @@ def generate_dimensions(
 
     client = anthropic.Anthropic(api_key=key)
 
-    # Build the prompt from metadata
+    user_msg = _build_user_message(metadata)
+
+    print(f"  Sending geometry to {model}...")
+    response = client.messages.create(
+        model=model,
+        max_tokens=2000,
+        system=SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_msg}],
+    )
+
+    text = response.content[0].text.strip()
+    return _parse_llm_response(text, metadata)
+
+
+def _build_user_message(metadata) -> str:
+    """Build the user prompt from part metadata."""
     part_summary = metadata.to_summary()
     bb = metadata.bounding_box
     size = bb["size"]
 
-    user_msg = f"""Here is the geometry data for a 3D part that needs a 2D manufacturing drawing:
+    return f"""Here is the geometry data for a 3D part that needs a 2D manufacturing drawing:
 
 {part_summary}
 
@@ -110,17 +172,9 @@ The part fills the view, so use the bounding box dimensions to estimate position
 
 Provide the dimensioning JSON now."""
 
-    print(f"  Sending geometry to {model}...")
-    response = client.messages.create(
-        model=model,
-        max_tokens=2000,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": user_msg}],
-    )
 
-    # Parse JSON from response
-    text = response.content[0].text.strip()
-
+def _parse_llm_response(text: str, metadata) -> dict:
+    """Parse JSON from LLM response, handling markdown fences."""
     # Strip any markdown code fences if present
     if text.startswith("```"):
         text = text.split("\n", 1)[1] if "\n" in text else text
