@@ -114,23 +114,25 @@ def extract_metadata(filepath: str, shape: Optional[cq.Workplane] = None) -> Par
             area = face.Area()
 
             try:
-                # Try to get surface type from the underlying geometry
+                # Get surface type from the geometry object class name
+                # Newer CadQuery/OCP returns Geom_Plane, Geom_CylindricalSurface, etc.
                 surf = face._geomAdaptor()
-                tr = surf.GetType()
-                if tr == 0:  # Plane
+                typename = type(surf).__name__
+
+                if "Plane" in typename:
                     face_type = "planar"
                     try:
                         normal = [round(n, 4) for n in face.normalAt().normalized().toTuple()]
                     except Exception:
                         pass
-                elif tr == 1:  # Cylinder
+                elif "Cylindrical" in typename:
                     face_type = "cylindrical"
                     try:
                         cyl = surf.Cylinder()
                         radius = round(cyl.Radius(), 3)
                     except Exception:
                         pass
-                elif tr == 2:  # Cone
+                elif "Conical" in typename:
                     face_type = "conical"
                     try:
                         cone = surf.Cone()
